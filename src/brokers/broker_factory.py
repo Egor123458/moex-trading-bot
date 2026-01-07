@@ -47,11 +47,18 @@ def create_broker(
             from src.data_collection.tinkoff_api import TinkoffAPIClient
             logger.info("Создание Tinkoff Broker")
             # Используем TinkoffAPIClient как брокер
-            return TinkoffBrokerWrapper(
-                TinkoffAPIClient(token=token, account_id=account_id, sandbox=sandbox)
+            tinkoff_client = TinkoffAPIClient(token=token, account_id=account_id, sandbox=sandbox)
+            return TinkoffBrokerWrapper(tinkoff_client)
+        except ImportError as e:
+            logger.warning(f"Tinkoff API недоступен: {e}, используем Paper Trading")
+            return PaperTradingBroker(
+                token=token,
+                account_id=account_id,
+                sandbox=sandbox,
+                initial_capital=initial_capital
             )
-        except ImportError:
-            logger.warning("Tinkoff API недоступен, используем Paper Trading")
+        except Exception as e:
+            logger.warning(f"Ошибка создания Tinkoff Broker: {e}, используем Paper Trading")
             return PaperTradingBroker(
                 token=token,
                 account_id=account_id,
@@ -101,8 +108,8 @@ class TinkoffBrokerWrapper(BaseBroker):
     """Обертка для TinkoffAPIClient, чтобы он соответствовал интерфейсу BaseBroker"""
     
     def __init__(self, tinkoff_client):
-        from src.data_collection.tinkoff_api import TinkoffAPIClient
-        self.client: TinkoffAPIClient = tinkoff_client
+        import pandas as pd
+        self.client = tinkoff_client
         self.logger = logging.getLogger(self.__class__.__name__)
     
     def get_portfolio(self):
@@ -118,6 +125,7 @@ class TinkoffBrokerWrapper(BaseBroker):
         return self.client.get_figi_by_ticker(ticker)
     
     def get_candles(self, ticker: str, from_date, to_date, interval: str = '1h'):
+        import pandas as pd
         figi = self.client.get_figi_by_ticker(ticker)
         if not figi:
             return pd.DataFrame()
