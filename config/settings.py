@@ -19,6 +19,13 @@ class APISettings:
     TINKOFF_LIVE_ACCOUNT_ID: str = os.getenv('TINKOFF_LIVE_ACCOUNT_ID', '')
     MOEX_API_KEY: str = os.getenv('MOEX_API_KEY', '')  # Для ALGOPACK
     
+    # Альтернативные брокеры
+    BROKER_TYPE: str = os.getenv('BROKER_TYPE', 'paper')  # 'paper', 'tinkoff', 'finam', 'alor'
+    FINAM_TOKEN: str = os.getenv('FINAM_TOKEN', '')
+    FINAM_ACCOUNT_ID: str = os.getenv('FINAM_ACCOUNT_ID', '')
+    ALOR_TOKEN: str = os.getenv('ALOR_TOKEN', '')
+    ALOR_ACCOUNT_ID: str = os.getenv('ALOR_ACCOUNT_ID', '')
+    
     def __post_init__(self):
         """Парсинг токенов из переменных окружения"""
         # Парсинг sandbox токенов
