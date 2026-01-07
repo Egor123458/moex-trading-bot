@@ -11,10 +11,13 @@ try:
     TINKOFF_AVAILABLE = True
 except ImportError:
     TINKOFF_AVAILABLE = False
+    # Создаем заглушки для типов
     Client = None
-    CandleInterval = None
     OrderDirection = None
     OrderType = None
+    MoneyValue = None
+    Quotation = None
+    CandleInterval = None
 
 from src.utils.token_manager import token_manager
 
@@ -66,7 +69,7 @@ class TinkoffAPIClient:
         figi: str,
         from_date: datetime,
         to_date: datetime,
-        interval: CandleInterval = CandleInterval.CANDLE_INTERVAL_HOUR,
+        interval = None,
     ) -> pd.DataFrame:
         """
         Получить свечи через Tinkoff API.
@@ -75,11 +78,19 @@ class TinkoffAPIClient:
             figi: FIGI инструмента
             from_date: Начальная дата
             to_date: Конечная дата
-            interval: CANDLE_INTERVAL_1_MIN, _5_MIN, _HOUR, _DAY
+            interval: CANDLE_INTERVAL_1_MIN, _5_MIN, _HOUR, _DAY (или None для значения по умолчанию)
         
         Returns:
             DataFrame с OHLCV
         """
+        if interval is None:
+            if TINKOFF_AVAILABLE and CandleInterval is not None:
+                interval = CandleInterval.CANDLE_INTERVAL_HOUR
+            else:
+                # Fallback если библиотека не установлена
+                logger.error("tinkoff.invest не установлен! Установите: pip install tinkoff-invest")
+                return pd.DataFrame()
+        
         max_retries = len(token_manager.get_all_tokens())
         retry_count = 0
         
@@ -186,11 +197,15 @@ class TinkoffAPIClient:
             {'order_id': str, 'status': str, 'executed_price': float}
         """
         if isinstance(direction, str):
-            direction = (
-                OrderDirection.ORDER_DIRECTION_BUY
-                if direction.upper() == "BUY"
-                else OrderDirection.ORDER_DIRECTION_SELL
-            )
+            if TINKOFF_AVAILABLE and OrderDirection is not None:
+                direction = (
+                    OrderDirection.ORDER_DIRECTION_BUY
+                    if direction.upper() == "BUY"
+                    else OrderDirection.ORDER_DIRECTION_SELL
+                )
+            else:
+                logger.error("tinkoff.invest не установлен!")
+                return {"order_id": "", "status": "FAILED", "lots_executed": 0, "executed_price": 0.0}
         
         max_retries = len(token_manager.get_all_tokens())
         retry_count = 0
@@ -203,7 +218,7 @@ class TinkoffAPIClient:
                         quantity=quantity,
                         direction=direction,
                         account_id=self.account_id,
-                        order_type=OrderType.ORDER_TYPE_MARKET,
+                        order_type=OrderType.ORDER_TYPE_MARKET if OrderType else None,
                     )
                     
                     return {
@@ -262,11 +277,19 @@ class TinkoffAPIClient:
             return None
     
     @staticmethod
-    def _quotation_to_float(q: Quotation) -> float:
+    def _quotation_to_float(q) -> float:
         """Конвертация Quotation в float"""
-        return q.units + q.nano / 1e9
+        if q is None:
+            return 0.0
+        if hasattr(q, 'units') and hasattr(q, 'nano'):
+            return q.units + q.nano / 1e9
+        return float(q) if q else 0.0
     
     @staticmethod
-    def _money_to_float(m: MoneyValue) -> float:
+    def _money_to_float(m) -> float:
         """Конвертация MoneyValue в float"""
-        return m.units + m.nano / 1e9
+        if m is None:
+            return 0.0
+        if hasattr(m, 'units') and hasattr(m, 'nano'):
+            return m.units + m.nano / 1e9
+        return float(m) if m else 0.0
