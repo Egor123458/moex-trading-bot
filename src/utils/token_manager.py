@@ -11,19 +11,32 @@ logger = logging.getLogger(__name__)
 class TokenManager:
     """Управление несколькими токенами Tinkoff с ротацией и балансировкой"""
     
-    def __init__(self, tokens: Optional[List[str]] = None):
+    def __init__(self, tokens: Optional[List[str]] = None, sandbox: bool = True):
         """
         Args:
             tokens: Список токенов. Если None, берется из settings
+            sandbox: True для sandbox токенов, False для live
         """
-        self.tokens = tokens or settings.api.get_all_tokens()
+        if tokens is None:
+            if sandbox:
+                self.tokens = settings.api.get_sandbox_tokens()
+            else:
+                self.tokens = settings.api.get_live_tokens()
+            
+            # Обратная совместимость
+            if not self.tokens:
+                self.tokens = settings.api.get_all_tokens()
+        else:
+            self.tokens = tokens
+        
+        self.sandbox = sandbox
         self.current_index = 0
         self.failed_tokens = set()  # Токены, которые не работают
         
         if not self.tokens:
-            logger.warning("Список токенов пуст!")
+            logger.warning(f"Список токенов пуст (sandbox={sandbox})!")
         else:
-            logger.info(f"Инициализирован TokenManager с {len(self.tokens)} токенами")
+            logger.info(f"Инициализирован TokenManager с {len(self.tokens)} токенами (sandbox={sandbox})")
     
     def get_token(self, strategy: str = 'round_robin') -> Optional[str]:
         """
@@ -66,7 +79,7 @@ class TokenManager:
         try:
             index = self.tokens.index(token)
             self.failed_tokens.add(index)
-            logger.warning(f"Токен #{index} помечен как неработающий")
+            logger.warning(f"Токен #{index} помечен как неработающий (sandbox={self.sandbox})")
         except ValueError:
             pass
     
@@ -75,7 +88,7 @@ class TokenManager:
         try:
             index = self.tokens.index(token)
             self.failed_tokens.discard(index)
-            logger.info(f"Токен #{index} восстановлен")
+            logger.info(f"Токен #{index} восстановлен (sandbox={self.sandbox})")
         except ValueError:
             pass
     
@@ -88,6 +101,9 @@ class TokenManager:
         return len(self.tokens) - len(self.failed_tokens)
 
 
-# Глобальный экземпляр менеджера
-token_manager = TokenManager()
+# Глобальные экземпляры менеджеров
+sandbox_token_manager = TokenManager(sandbox=True)
+live_token_manager = TokenManager(sandbox=False)
 
+# Для обратной совместимости
+token_manager = sandbox_token_manager

@@ -1,6 +1,6 @@
 ﻿import os
 from dataclasses import dataclass
-from typing import List
+from typing import List, Dict
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -12,37 +12,59 @@ class APISettings:
     
     # Поддержка нескольких токенов Tinkoff (через запятую или перенос строки)
     TINKOFF_TOKENS: List[str] = None
+    TINKOFF_SANDBOX_TOKENS: List[str] = None  # Токены для sandbox (тестирования)
+    TINKOFF_LIVE_TOKENS: List[str] = None    # Токены для live (реальной торговли)
     TINKOFF_ACCOUNT_ID: str = os.getenv('TINKOFF_ACCOUNT_ID', '')
+    TINKOFF_SANDBOX_ACCOUNT_ID: str = os.getenv('TINKOFF_SANDBOX_ACCOUNT_ID', '')
+    TINKOFF_LIVE_ACCOUNT_ID: str = os.getenv('TINKOFF_LIVE_ACCOUNT_ID', '')
     MOEX_API_KEY: str = os.getenv('MOEX_API_KEY', '')  # Для ALGOPACK
     
     def __post_init__(self):
-        """Парсинг токенов из переменной окружения"""
+        """Парсинг токенов из переменных окружения"""
+        # Парсинг sandbox токенов
+        if self.TINKOFF_SANDBOX_TOKENS is None:
+            sandbox_tokens_str = os.getenv('TINKOFF_SANDBOX_TOKENS', '')
+            if sandbox_tokens_str:
+                sandbox_tokens_str = sandbox_tokens_str.replace('\n', ',').replace(';', ',')
+                self.TINKOFF_SANDBOX_TOKENS = [t.strip() for t in sandbox_tokens_str.split(',') if t.strip()]
+            else:
+                self.TINKOFF_SANDBOX_TOKENS = []
+        
+        # Парсинг live токенов
+        if self.TINKOFF_LIVE_TOKENS is None:
+            live_tokens_str = os.getenv('TINKOFF_LIVE_TOKENS', '')
+            if live_tokens_str:
+                live_tokens_str = live_tokens_str.replace('\n', ',').replace(';', ',')
+                self.TINKOFF_LIVE_TOKENS = [t.strip() for t in live_tokens_str.split(',') if t.strip()]
+            else:
+                self.TINKOFF_LIVE_TOKENS = []
+        
+        # Обратная совместимость: если указан TINKOFF_TOKENS, используем его
         if self.TINKOFF_TOKENS is None:
             tokens_str = os.getenv('TINKOFF_TOKENS', os.getenv('TINKOFF_TOKEN', ''))
-            
-            # Поддержка нескольких форматов:
-            # 1. Через запятую: token1,token2,token3
-            # 2. Через перенос строки: token1\ntoken2\ntoken3
-            # 3. Через точку с запятой: token1;token2;token3
-            
             if tokens_str:
-                # Замена переносов строк и точек с запятой на запятые
                 tokens_str = tokens_str.replace('\n', ',').replace(';', ',')
-                # Разделение по запятым и очистка
                 tokens = [t.strip() for t in tokens_str.split(',') if t.strip()]
                 self.TINKOFF_TOKENS = tokens
             else:
                 self.TINKOFF_TOKENS = []
     
-    def get_token(self, index: int = 0) -> str:
-        """Получить токен по индексу (для ротации)"""
-        if not self.TINKOFF_TOKENS:
-            return ''
-        return self.TINKOFF_TOKENS[index % len(self.TINKOFF_TOKENS)]
+    def get_sandbox_tokens(self) -> List[str]:
+        """Получить токены для sandbox"""
+        return self.TINKOFF_SANDBOX_TOKENS if self.TINKOFF_SANDBOX_TOKENS else []
+    
+    def get_live_tokens(self) -> List[str]:
+        """Получить токены для live"""
+        return self.TINKOFF_LIVE_TOKENS if self.TINKOFF_LIVE_TOKENS else []
     
     def get_all_tokens(self) -> List[str]:
-        """Получить все токены"""
-        return self.TINKOFF_TOKENS if self.TINKOFF_TOKENS else []
+        """Получить все токены (для обратной совместимости)"""
+        all_tokens = []
+        all_tokens.extend(self.get_sandbox_tokens())
+        all_tokens.extend(self.get_live_tokens())
+        if not all_tokens and self.TINKOFF_TOKENS:
+            all_tokens = self.TINKOFF_TOKENS
+        return all_tokens
 
 
 @dataclass
