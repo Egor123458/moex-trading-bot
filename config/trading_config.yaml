@@ -1,0 +1,25 @@
+tickers:
+  primary:
+    - "SBER"
+    - "GAZP"
+    - "LKOH"
+    - "GMKN"
+    - "YNDX"
+  watchlist:
+    - "ROSN"
+    - "NVTK"
+    - "PLZL"
+
+investment_module:
+  strategy: "index_replication"
+  rebalance_frequency: "quarterly"
+  top_stocks: 15
+
+trading_module:
+  active_strategies:
+    - "ml_classifier"
+  
+  ml_classifier:
+    model_type: "xgboost"
+    buy_threshold: 0.65
+    sell_threshold: 0.35

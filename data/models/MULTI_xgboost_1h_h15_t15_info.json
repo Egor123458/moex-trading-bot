@@ -1,0 +1,6 @@
+{
+  "optimal_threshold": 0.3928651809692383,
+  "roc_auc": 0.5480427393111762,
+  "horizon": 15,
+  "growth_threshold": 0.015
+}
