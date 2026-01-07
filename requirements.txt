@@ -10,9 +10,9 @@ psycopg2-binary>=2.9.0
 # API клиенты
 requests>=2.31.0
 # Tinkoff Invest API - используйте один из вариантов:
-# invest-python>=0.1.0  # Официальная библиотека Tinkoff
-# ИЛИ
-tinkoff-invest>=0.1.0  # Альтернативная библиотека
+# tinkoff-investments>=0.1.0  # Официальная библиотека Tinkoff (рекомендуется)
+# ИЛИ установите напрямую с GitHub:
+# pip install git+https://github.com/Tinkoff/invest-python.git
 # moexalgo больше не используется - используем прямой REST API MOEX
 
 # ML библиотеки

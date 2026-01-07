@@ -6,12 +6,21 @@ echo "🔧 Установка Tinkoff Invest API библиотеки..."
 # Активируем виртуальное окружение
 source venv/bin/activate
 
-# Пробуем установить invest-python (официальная библиотека)
-echo "Попытка установки invest-python..."
-pip install invest-python 2>&1 | tee /tmp/tinkoff_install.log
+# Пробуем установить tinkoff-investments (официальная библиотека)
+echo "Попытка установки tinkoff-investments..."
+pip install tinkoff-investments 2>&1 | tee /tmp/tinkoff_install.log
 
 if [ $? -eq 0 ]; then
-    echo "✅ invest-python установлен успешно"
+    echo "✅ tinkoff-investments установлен успешно"
+    exit 0
+fi
+
+# Если не получилось, пробуем установить напрямую с GitHub
+echo "Попытка установки с GitHub..."
+pip install git+https://github.com/Tinkoff/invest-python.git 2>&1 | tee -a /tmp/tinkoff_install.log
+
+if [ $? -eq 0 ]; then
+    echo "✅ invest-python установлен с GitHub успешно"
     exit 0
 fi
 
@@ -24,8 +33,13 @@ if [ $? -eq 0 ]; then
     exit 0
 fi
 
-# Если оба не установились, выводим ошибку
+# Если все не установились, выводим ошибку
 echo "❌ Не удалось установить ни одну библиотеку Tinkoff"
 echo "Проверьте логи: cat /tmp/tinkoff_install.log"
+echo ""
+echo "Попробуйте установить вручную:"
+echo "  pip install tinkoff-investments"
+echo "  ИЛИ"
+echo "  pip install git+https://github.com/Tinkoff/invest-python.git"
 exit 1
 
