@@ -10,7 +10,7 @@ psycopg2-binary>=2.9.0
 # API клиенты
 requests>=2.31.0
 tinkoff-invest>=0.1.0
-moexalgo>=2.5.0
+moexalgo>=2.0.0,<2.5.0  # Версия совместимая с Python 3.10
 
 # ML библиотеки
 scikit-learn>=1.3.0
