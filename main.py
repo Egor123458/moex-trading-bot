@@ -30,9 +30,9 @@ try:
     from config.settings import settings
     from src.utils.token_manager import sandbox_token_manager, live_token_manager
     from src.data_collection.database import DatabaseManager
-    from src.data_collection.tinkoff_api import TinkoffAPIClient
     from src.data_collection.moex_api import MOEXDataCollector
     from src.monitoring.bot_status_manager import BotStatusManager
+    from src.brokers.broker_factory import create_broker
 except ImportError as e:
     logger.error(f"Ошибка импорта: {e}")
     sys.exit(1)
@@ -55,39 +55,98 @@ class TradingBot:
         logger.info("="*60)
         logger.info("ИНИЦИАЛИЗАЦИЯ ТОРГОВОГО БОТА")
         logger.info("="*60)
+        logger.info(f"Тип брокера: {settings.api.BROKER_TYPE}")
+        logger.info(f"Режим: {settings.MODE}")
         
-        # Проверка токенов
-        sandbox_tokens = sandbox_token_manager.get_all_tokens()
-        live_tokens = live_token_manager.get_all_tokens()
-        
-        logger.info(f"Sandbox токенов: {len(sandbox_tokens)}")
-        logger.info(f"Live токенов: {len(live_tokens)}")
-        
-        if not sandbox_tokens and not live_tokens:
-            logger.error("❌ Нет доступных токенов!")
-            return False
+        broker_type = settings.api.BROKER_TYPE.lower()
         
         # Инициализация sandbox клиента
-        if sandbox_tokens and settings.MODE in ['paper_trading', 'dual_mode']:
+        if settings.MODE in ['paper_trading', 'dual_mode']:
             try:
-                self.sandbox_client = TinkoffAPIClient(
-                    token=sandbox_token_manager.get_token(),
-                    account_id=settings.api.TINKOFF_SANDBOX_ACCOUNT_ID or settings.api.TINKOFF_ACCOUNT_ID,
-                    sandbox=True
-                )
-                logger.info("✅ Sandbox клиент инициализирован")
+                if broker_type == 'finam':
+                    # Finam для sandbox (можно использовать тот же токен или отдельный счет)
+                    finam_token = settings.api.FINAM_SANDBOX_TOKEN or settings.api.FINAM_TOKEN
+                    finam_account = settings.api.FINAM_SANDBOX_ACCOUNT_ID or settings.api.FINAM_ACCOUNT_ID
+                    if finam_token:
+                        self.sandbox_client = create_broker(
+                            broker_type='finam',
+                            token=finam_token,
+                            account_id=finam_account,
+                            sandbox=True,
+                            initial_capital=settings.trading.INITIAL_CAPITAL
+                        )
+                        logger.info("✅ Sandbox Finam клиент инициализирован")
+                    else:
+                        logger.warning("⚠️  Finam токен не указан для sandbox")
+                elif broker_type == 'tinkoff':
+                    # Tinkoff для sandbox
+                    sandbox_tokens = sandbox_token_manager.get_all_tokens()
+                    if sandbox_tokens:
+                        self.sandbox_client = create_broker(
+                            broker_type='tinkoff',
+                            token=sandbox_token_manager.get_token(),
+                            account_id=settings.api.TINKOFF_SANDBOX_ACCOUNT_ID or settings.api.TINKOFF_ACCOUNT_ID,
+                            sandbox=True,
+                            initial_capital=settings.trading.INITIAL_CAPITAL
+                        )
+                        logger.info("✅ Sandbox Tinkoff клиент инициализирован")
+                    else:
+                        logger.warning("⚠️  Tinkoff токены не указаны для sandbox")
+                else:
+                    # Paper Trading или другой брокер
+                    self.sandbox_client = create_broker(
+                        broker_type=broker_type,
+                        token='',
+                        account_id='',
+                        sandbox=True,
+                        initial_capital=settings.trading.INITIAL_CAPITAL
+                    )
+                    logger.info(f"✅ Sandbox {broker_type} клиент инициализирован")
             except Exception as e:
                 logger.error(f"Ошибка инициализации sandbox клиента: {e}")
         
         # Инициализация live клиента
-        if live_tokens and settings.MODE in ['live_trading', 'dual_mode']:
+        if settings.MODE in ['live_trading', 'dual_mode']:
             try:
-                self.live_client = TinkoffAPIClient(
-                    token=live_token_manager.get_token(),
-                    account_id=settings.api.TINKOFF_LIVE_ACCOUNT_ID or settings.api.TINKOFF_ACCOUNT_ID,
-                    sandbox=False
-                )
-                logger.info("✅ Live клиент инициализирован")
+                if broker_type == 'finam':
+                    # Finam для live
+                    finam_token = settings.api.FINAM_LIVE_TOKEN or settings.api.FINAM_TOKEN
+                    finam_account = settings.api.FINAM_LIVE_ACCOUNT_ID or settings.api.FINAM_ACCOUNT_ID
+                    if finam_token:
+                        self.live_client = create_broker(
+                            broker_type='finam',
+                            token=finam_token,
+                            account_id=finam_account,
+                            sandbox=False,
+                            initial_capital=settings.trading.INITIAL_CAPITAL
+                        )
+                        logger.info("✅ Live Finam клиент инициализирован")
+                    else:
+                        logger.warning("⚠️  Finam токен не указан для live")
+                elif broker_type == 'tinkoff':
+                    # Tinkoff для live
+                    live_tokens = live_token_manager.get_all_tokens()
+                    if live_tokens:
+                        self.live_client = create_broker(
+                            broker_type='tinkoff',
+                            token=live_token_manager.get_token(),
+                            account_id=settings.api.TINKOFF_LIVE_ACCOUNT_ID or settings.api.TINKOFF_ACCOUNT_ID,
+                            sandbox=False,
+                            initial_capital=settings.trading.INITIAL_CAPITAL
+                        )
+                        logger.info("✅ Live Tinkoff клиент инициализирован")
+                    else:
+                        logger.warning("⚠️  Tinkoff токены не указаны для live")
+                else:
+                    # Paper Trading или другой брокер
+                    self.live_client = create_broker(
+                        broker_type=broker_type,
+                        token='',
+                        account_id='',
+                        sandbox=False,
+                        initial_capital=settings.trading.INITIAL_CAPITAL
+                    )
+                    logger.info(f"✅ Live {broker_type} клиент инициализирован")
             except Exception as e:
                 logger.error(f"Ошибка инициализации live клиента: {e}")
         

@@ -22,7 +22,11 @@ class APISettings:
     # Альтернативные брокеры
     BROKER_TYPE: str = os.getenv('BROKER_TYPE', 'paper')  # 'paper', 'tinkoff', 'finam', 'alor'
     FINAM_TOKEN: str = os.getenv('FINAM_TOKEN', '')
+    FINAM_SANDBOX_TOKEN: str = os.getenv('FINAM_SANDBOX_TOKEN', '')  # Для тестирования (можно использовать тот же токен)
+    FINAM_LIVE_TOKEN: str = os.getenv('FINAM_LIVE_TOKEN', '')  # Для реальной торговли
     FINAM_ACCOUNT_ID: str = os.getenv('FINAM_ACCOUNT_ID', '')
+    FINAM_SANDBOX_ACCOUNT_ID: str = os.getenv('FINAM_SANDBOX_ACCOUNT_ID', '')  # Счет для тестирования
+    FINAM_LIVE_ACCOUNT_ID: str = os.getenv('FINAM_LIVE_ACCOUNT_ID', '')  # Счет для реальной торговли
     ALOR_TOKEN: str = os.getenv('ALOR_TOKEN', '')
     ALOR_ACCOUNT_ID: str = os.getenv('ALOR_ACCOUNT_ID', '')
     
