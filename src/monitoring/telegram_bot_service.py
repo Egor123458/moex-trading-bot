@@ -1,7 +1,13 @@
 """Сервис для запуска Telegram бота отдельным процессом"""
 
+import sys
 import asyncio
 import logging
+from pathlib import Path
+
+# Добавляем корневую папку в PYTHONPATH
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 from config.settings import settings
 from src.monitoring.telegram_bot import TelegramBot
 

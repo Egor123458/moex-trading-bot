@@ -1,9 +1,14 @@
 ﻿"""Telegram бот с меню для управления торговым ботом"""
 
+import sys
 import logging
 from typing import Optional
 from datetime import datetime
+from pathlib import Path
 import json
+
+# Добавляем корневую папку в PYTHONPATH
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 try:
     from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
@@ -13,7 +18,19 @@ except ImportError:
     TELEGRAM_AVAILABLE = False
     logging.warning("python-telegram-bot не установлен. Установите: pip install python-telegram-bot")
 
-from config.settings import settings
+try:
+    from config.settings import settings
+except ImportError:
+    # Fallback если импорт не работает
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+    settings = type('Settings', (), {
+        'TELEGRAM_BOT_TOKEN': os.getenv('TELEGRAM_BOT_TOKEN', ''),
+        'TELEGRAM_CHAT_ID': os.getenv('TELEGRAM_CHAT_ID', ''),
+        'trading': type('Trading', (), {'INITIAL_CAPITAL': float(os.getenv('INITIAL_CAPITAL', 1000000))})(),
+        'MODE': os.getenv('MODE', 'paper_trading')
+    })()
 
 logger = logging.getLogger(__name__)
 
