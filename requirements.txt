@@ -1,1 +1,35 @@
-﻿
+﻿# Основные зависимости
+python-dotenv>=1.0.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# База данных
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.0
+
+# API клиенты
+requests>=2.31.0
+tinkoff-invest>=0.1.0
+moexalgo>=2.5.0
+
+# ML библиотеки
+scikit-learn>=1.3.0
+xgboost>=2.0.0
+
+# Утилиты
+pyyaml>=6.0
+schedule>=1.2.0
+
+# Логирование и мониторинг
+python-telegram-bot>=20.0
+
+# Опционально (для RL)
+# stable-baselines3>=2.0.0
+# gym>=0.26.0
+
+# Для бэктестинга (опционально)
+# backtrader>=1.9.78
+
+# Для дашборда (опционально)
+# streamlit>=1.28.0
+# plotly>=5.17.0
