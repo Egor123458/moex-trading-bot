@@ -1,0 +1,33 @@
+[Unit]
+Description=MOEX Trading Bot - AI Trading System
+After=network.target postgresql.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=tradingbot
+Group=tradingbot
+WorkingDirectory=/opt/moex_trading_bot
+Environment="PATH=/opt/moex_trading_bot/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/opt/moex_trading_bot/venv/bin/python /opt/moex_trading_bot/main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=moex-trading-bot
+
+# Ограничения ресурсов
+LimitNOFILE=65536
+MemoryMax=6G
+CPUQuota=300%
+
+# Безопасность
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/moex_trading_bot/data /opt/moex_trading_bot/logs
+
+[Install]
+WantedBy=multi-user.target
+
