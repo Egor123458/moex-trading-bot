@@ -1,13 +1,15 @@
 ﻿#!/usr/bin/env python3
 """
 Главная точка входа торгового бота MOEX
+Поддержка одновременной работы sandbox и live моделей
 """
 
 import sys
 import time
 import logging
+import threading
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Добавляем корневую папку в PYTHONPATH
 sys.path.insert(0, str(Path(__file__).parent))
@@ -27,65 +29,227 @@ logger = logging.getLogger(__name__)
 try:
     from config.settings import settings
     from src.utils.token_manager import sandbox_token_manager, live_token_manager
+    from src.data_collection.database import DatabaseManager
+    from src.data_collection.tinkoff_api import TinkoffAPIClient
+    from src.data_collection.moex_api import MOEXDataCollector
+    from src.monitoring.bot_status_manager import BotStatusManager
 except ImportError as e:
     logger.error(f"Ошибка импорта: {e}")
     sys.exit(1)
 
 
+class TradingBot:
+    """Основной класс торгового бота с поддержкой dual mode"""
+    
+    def __init__(self):
+        self.sandbox_client = None
+        self.live_client = None
+        self.db = None
+        self.moex = None
+        self.trading_enabled = True
+        self.sandbox_capital = settings.trading.INITIAL_CAPITAL
+        self.live_capital = settings.trading.INITIAL_CAPITAL
+        
+    def initialize(self):
+        """Инициализация всех компонентов"""
+        logger.info("="*60)
+        logger.info("ИНИЦИАЛИЗАЦИЯ ТОРГОВОГО БОТА")
+        logger.info("="*60)
+        
+        # Проверка токенов
+        sandbox_tokens = sandbox_token_manager.get_all_tokens()
+        live_tokens = live_token_manager.get_all_tokens()
+        
+        logger.info(f"Sandbox токенов: {len(sandbox_tokens)}")
+        logger.info(f"Live токенов: {len(live_tokens)}")
+        
+        if not sandbox_tokens and not live_tokens:
+            logger.error("❌ Нет доступных токенов!")
+            return False
+        
+        # Инициализация sandbox клиента
+        if sandbox_tokens and settings.MODE in ['paper_trading', 'dual_mode']:
+            try:
+                self.sandbox_client = TinkoffAPIClient(
+                    token=sandbox_token_manager.get_token(),
+                    account_id=settings.api.TINKOFF_SANDBOX_ACCOUNT_ID or settings.api.TINKOFF_ACCOUNT_ID,
+                    sandbox=True
+                )
+                logger.info("✅ Sandbox клиент инициализирован")
+            except Exception as e:
+                logger.error(f"Ошибка инициализации sandbox клиента: {e}")
+        
+        # Инициализация live клиента
+        if live_tokens and settings.MODE in ['live_trading', 'dual_mode']:
+            try:
+                self.live_client = TinkoffAPIClient(
+                    token=live_token_manager.get_token(),
+                    account_id=settings.api.TINKOFF_LIVE_ACCOUNT_ID or settings.api.TINKOFF_ACCOUNT_ID,
+                    sandbox=False
+                )
+                logger.info("✅ Live клиент инициализирован")
+            except Exception as e:
+                logger.error(f"Ошибка инициализации live клиента: {e}")
+        
+        if not self.sandbox_client and not self.live_client:
+            logger.error("❌ Не удалось инициализировать ни одного клиента!")
+            return False
+        
+        # Инициализация БД
+        try:
+            self.db = DatabaseManager(settings.db.DATABASE_URL)
+            logger.info(f"✅ Подключение к БД установлено")
+        except Exception as e:
+            logger.warning(f"⚠️  Проблема с подключением к БД: {e}")
+        
+        # Инициализация MOEX API
+        try:
+            self.moex = MOEXDataCollector()
+            logger.info("✅ MOEX API инициализирован")
+        except Exception as e:
+            logger.warning(f"⚠️  Проблема с MOEX API: {e}")
+        
+        return True
+    
+    def get_portfolio_info(self, client, mode_name: str):
+        """Получить информацию о портфеле"""
+        try:
+            portfolio = client.get_portfolio()
+            capital = portfolio.get('total_value', 0)
+            cash = portfolio.get('cash', 0)
+            positions = portfolio.get('positions', [])
+            positions_count = len(positions)
+            
+            logger.info(f"{mode_name} портфель: {capital:,.2f} ₽ (позиций: {positions_count})")
+            
+            # Обновление статуса
+            if mode_name == "Sandbox":
+                BotStatusManager.update_sandbox_capital(capital)
+                BotStatusManager.update_sandbox_positions(positions)
+            elif mode_name == "Live":
+                BotStatusManager.update_live_capital(capital)
+                BotStatusManager.update_live_positions(positions)
+            
+            return {
+                'capital': capital,
+                'cash': cash,
+                'positions_count': positions_count,
+                'positions': positions
+            }
+        except Exception as e:
+            logger.warning(f"Ошибка получения {mode_name} портфеля: {e}")
+            return None
+    
+    def trading_cycle_sandbox(self):
+        """Торговый цикл для sandbox (тестирование)"""
+        if not self.sandbox_client or not self.trading_enabled:
+            return
+        
+        try:
+            logger.info("--- Sandbox торговый цикл ---")
+            
+            # Получение портфеля
+            portfolio_info = self.get_portfolio_info(self.sandbox_client, "Sandbox")
+            if portfolio_info:
+                self.sandbox_capital = portfolio_info['capital']
+            
+            # TODO: Генерация сигналов и торговля для sandbox
+            # Здесь будет логика тестирования стратегий
+            
+            logger.info("Sandbox цикл завершен")
+            
+        except Exception as e:
+            logger.error(f"Ошибка в sandbox цикле: {e}", exc_info=True)
+    
+    def trading_cycle_live(self):
+        """Торговый цикл для live (реальная торговля)"""
+        if not self.live_client or not self.trading_enabled:
+            return
+        
+        try:
+            logger.info("--- Live торговый цикл ---")
+            
+            # Получение портфеля
+            portfolio_info = self.get_portfolio_info(self.live_client, "Live")
+            if portfolio_info:
+                self.live_capital = portfolio_info['capital']
+            
+            # TODO: Генерация сигналов и торговля для live
+            # Здесь будет логика реальной торговли
+            # Стратегии сначала тестируются на sandbox, затем применяются на live
+            
+            logger.info("Live цикл завершен")
+            
+        except Exception as e:
+            logger.error(f"Ошибка в live цикле: {e}", exc_info=True)
+    
+    def trading_cycle(self):
+        """Основной торговый цикл (выполняется для обоих режимов)"""
+        logger.info(f"--- Торговый цикл ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')}) ---")
+        
+        # Параллельное выполнение для sandbox и live
+        if settings.MODE == 'dual_mode':
+            # Оба режима одновременно
+            thread_sandbox = threading.Thread(target=self.trading_cycle_sandbox)
+            thread_live = threading.Thread(target=self.trading_cycle_live)
+            
+            thread_sandbox.start()
+            thread_live.start()
+            
+            thread_sandbox.join()
+            thread_live.join()
+            
+        elif settings.MODE == 'paper_trading':
+            # Только sandbox
+            self.trading_cycle_sandbox()
+            
+        elif settings.MODE == 'live_trading':
+            # Только live
+            self.trading_cycle_live()
+        
+        logger.info("Торговый цикл завершен")
+    
+    def run(self):
+        """Запуск основного цикла бота"""
+        logger.info("="*60)
+        logger.info("ЗАПУСК ТОРГОВОГО БОТА MOEX AI")
+        logger.info(f"Режим: {settings.MODE}")
+        logger.info(f"Начальный капитал: {settings.trading.INITIAL_CAPITAL:,.0f} ₽")
+        logger.info("="*60)
+        
+        if not self.initialize():
+            logger.error("Не удалось инициализировать бота")
+            return
+        
+        logger.info("✅ Бот запущен и работает")
+        logger.info("Торговый цикл будет выполняться каждые 30 минут")
+        
+        # Основной цикл
+        cycle_count = 0
+        try:
+            while True:
+                cycle_count += 1
+                logger.info(f"\n{'='*60}")
+                logger.info(f"ТОРГОВЫЙ ЦИКЛ #{cycle_count}")
+                logger.info(f"{'='*60}")
+                
+                self.trading_cycle()
+                
+                # Ожидание до следующего цикла (30 минут = 1800 секунд)
+                logger.info("\nОжидание до следующего цикла (30 минут)...")
+                time.sleep(1800)  # 30 минут
+                
+        except KeyboardInterrupt:
+            logger.info("\nБот остановлен пользователем (Ctrl+C)")
+        except Exception as e:
+            logger.error(f"Критическая ошибка: {e}", exc_info=True)
+            raise
+
+
 def main():
-    """Основная функция запуска бота"""
-    logger.info("="*60)
-    logger.info("ЗАПУСК ТОРГОВОГО БОТА MOEX AI")
-    logger.info(f"Режим: {settings.MODE}")
-    logger.info(f"Начальный капитал: {settings.trading.INITIAL_CAPITAL:,.0f} ₽")
-    logger.info("="*60)
-    
-    # Проверка токенов
-    sandbox_tokens = sandbox_token_manager.get_all_tokens()
-    live_tokens = live_token_manager.get_all_tokens()
-    
-    logger.info(f"Sandbox токенов: {len(sandbox_tokens)}")
-    logger.info(f"Live токенов: {len(live_tokens)}")
-    
-    if not sandbox_tokens and not live_tokens:
-        logger.error("❌ Нет доступных токенов! Проверьте .env файл")
-        logger.info("Убедитесь, что в .env указаны:")
-        logger.info("  TINKOFF_SANDBOX_TOKENS=ваш_токен")
-        logger.info("  или")
-        logger.info("  TINKOFF_LIVE_TOKENS=ваш_токен")
-        return
-    
-    # Проверка подключения к БД
-    try:
-        from src.data_collection.database import DatabaseManager
-        db = DatabaseManager(settings.db.DATABASE_URL)
-        logger.info(f"✅ Подключение к БД: {settings.db.DATABASE_URL.split('@')[1] if '@' in settings.db.DATABASE_URL else 'локальная'}")
-    except Exception as e:
-        logger.warning(f"⚠️  Проблема с подключением к БД: {e}")
-    
-    logger.info("✅ Бот запущен и работает")
-    logger.info("Торговый цикл будет выполняться каждые 30 минут")
-    
-    # Основной цикл
-    cycle_count = 0
-    try:
-        while True:
-            cycle_count += 1
-            logger.info(f"--- Торговый цикл #{cycle_count} ---")
-            logger.info(f"Время: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            # TODO: Здесь будет основная логика торговли
-            # Пока просто логируем, что бот работает
-            
-            # Ожидание до следующего цикла (30 минут = 1800 секунд)
-            logger.info("Ожидание до следующего цикла (30 минут)...")
-            time.sleep(1800)  # 30 минут
-            
-    except KeyboardInterrupt:
-        logger.info("Бот остановлен пользователем (Ctrl+C)")
-    except Exception as e:
-        logger.error(f"Критическая ошибка: {e}", exc_info=True)
-        raise
+    """Точка входа"""
+    bot = TradingBot()
+    bot.run()
 
 
 if __name__ == "__main__":

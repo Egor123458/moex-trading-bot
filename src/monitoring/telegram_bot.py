@@ -46,7 +46,13 @@ class TelegramBot:
         self.chat_id = chat_id
         self.application = None
         self.trading_enabled = True
-        self.bot_status = {}
+        
+        # Импорт менеджера статуса
+        try:
+            from src.monitoring.bot_status_manager import BotStatusManager
+            self.status_manager = BotStatusManager
+        except ImportError:
+            self.status_manager = None
         
         logger.info("TelegramBot инициализирован")
     
@@ -110,21 +116,49 @@ class TelegramBot:
         )
     
     def get_status_text(self) -> str:
-        """Формирование текста статуса"""
+        """Формирование текста статуса с информацией о двух моделях"""
         trading_status = "✅ Активна" if self.trading_enabled else "❌ Выключена"
-        model_status = "✅ Готова"  # TODO: проверка модели
-        capital = settings.trading.INITIAL_CAPITAL
-        profit = 0.0  # TODO: расчет прибыли
+        model_status = "✅ Готова"
+        
+        # Получение информации о капитале из файла статуса
+        if self.status_manager:
+            bot_status = self.status_manager.get_status()
+            self.trading_enabled = bot_status.get('trading_enabled', True)
+            sandbox_capital = bot_status.get('sandbox_capital', settings.trading.INITIAL_CAPITAL)
+            live_capital = bot_status.get('live_capital', settings.trading.INITIAL_CAPITAL)
+            sandbox_profit = bot_status.get('sandbox_profit', 0.0)
+            live_profit = bot_status.get('live_profit', 0.0)
+        else:
+            sandbox_capital = settings.trading.INITIAL_CAPITAL
+            live_capital = settings.trading.INITIAL_CAPITAL
+            sandbox_profit = 0.0
+            live_profit = 0.0
+        
+        # Определение режима работы
+        mode_text = ""
+        if settings.MODE == 'dual_mode':
+            mode_text = "🔄 Dual Mode (Sandbox + Live)"
+        elif settings.MODE == 'paper_trading':
+            mode_text = "🧪 Paper Trading (Sandbox)"
+        elif settings.MODE == 'live_trading':
+            mode_text = "💰 Live Trading"
         
         status = f"""
 ⚡ <b>Торговля</b> {trading_status}
 
 📊 <b>Статус бота</b> ({datetime.now().strftime('%d.%m.%Y %H:%M')})
 
-💰 <b>Торговля:</b> {trading_status}
-🤖 <b>Модель:</b> {model_status}
-💵 <b>Капитал:</b> {capital:,.0f} ₽
-📈 <b>Прибыль:</b> {profit:+.2f}%
+{mode_text}
+
+<b>🧪 SANDBOX (Тестирование):</b>
+💰 Капитал: {sandbox_capital:,.0f} ₽
+📈 Прибыль: {sandbox_profit:+.2f}%
+🤖 Модель: {model_status}
+
+<b>💰 LIVE (Реальная торговля):</b>
+💰 Капитал: {live_capital:,.0f} ₽
+📈 Прибыль: {live_profit:+.2f}%
+🤖 Модель: {model_status}
         """.strip()
         
         return status
@@ -146,6 +180,8 @@ class TelegramBot:
             await query.message.reply_text("🤖 Обучение модели...\n\nФункция в разработке")
         elif data == "disable_trading":
             self.trading_enabled = False
+            if self.status_manager:
+                self.status_manager.update_status({'trading_enabled': False})
             await query.message.reply_text("⛔ Торговля выключена")
             await self.send_main_menu(query.message.chat_id)
         elif data == "refresh":
@@ -160,16 +196,41 @@ class TelegramBot:
     
     async def portfolio_command(self, update, context: ContextTypes.DEFAULT_TYPE):
         """Команда портфеля"""
-        # TODO: получение реального портфеля
-        portfolio_text = """
+        # Получение информации из файла статуса
+        if self.status_manager:
+            bot_status = self.status_manager.get_status()
+            sandbox_positions = bot_status.get('sandbox_positions', [])
+            live_positions = bot_status.get('live_positions', [])
+            sandbox_capital = bot_status.get('sandbox_capital', 0)
+            live_capital = bot_status.get('live_capital', 0)
+        else:
+            sandbox_positions = []
+            live_positions = []
+            sandbox_capital = 0
+            live_capital = 0
+        
+        portfolio_text = f"""
 📊 <b>Портфель</b>
 
-Позиции:
-• SBER: 10 лотов
-• GAZP: 5 лотов
-
-Общая стоимость: 1,000,000 ₽
-        """
+<b>🧪 SANDBOX:</b>
+"""
+        if sandbox_positions:
+            for pos in sandbox_positions[:5]:  # Показываем первые 5
+                portfolio_text += f"• {pos.get('ticker', 'N/A')}: {pos.get('quantity', 0)} лотов\n"
+        else:
+            portfolio_text += "Нет открытых позиций\n"
+        
+        portfolio_text += f"Общая стоимость: {sandbox_capital:,.0f} ₽\n\n"
+        portfolio_text += f"<b>💰 LIVE:</b>\n"
+        
+        if live_positions:
+            for pos in live_positions[:5]:
+                portfolio_text += f"• {pos.get('ticker', 'N/A')}: {pos.get('quantity', 0)} лотов\n"
+        else:
+            portfolio_text += "Нет открытых позиций\n"
+        
+        portfolio_text += f"Общая стоимость: {live_capital:,.0f} ₽"
+        
         await update.reply_text(portfolio_text, parse_mode='HTML')
     
     async def trading_command(self, update, context: ContextTypes.DEFAULT_TYPE):
