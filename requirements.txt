@@ -22,6 +22,7 @@ schedule>=1.2.0
 
 # Логирование и мониторинг
 python-telegram-bot>=20.0
+aiohttp>=3.9.0
 
 # Опционально (для RL)
 # stable-baselines3>=2.0.0
