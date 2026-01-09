@@ -96,6 +96,7 @@ class TradingSettings:
     MAX_DRAWDOWN: float = 0.15
     DAILY_LOSS_LIMIT: float = 0.03
     COMMISSION_RATE: float = 0.0004  # 0.04%
+    SANDBOX_LEARNING_ONLY: bool = os.getenv('SANDBOX_LEARNING_ONLY', 'true').lower() == 'true'  # Режим "только обучение" для sandbox (без торговли)
 
 
 @dataclass

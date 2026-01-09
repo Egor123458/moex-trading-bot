@@ -200,22 +200,76 @@ class TradingBot:
             return None
     
     def trading_cycle_sandbox(self):
-        """Торговый цикл для sandbox (тестирование)"""
+        """Торговый цикл для sandbox (тестирование или обучение)"""
         if not self.sandbox_client or not self.trading_enabled:
             return
         
         try:
-            logger.info("--- Sandbox торговый цикл ---")
+            learning_only = settings.trading.SANDBOX_LEARNING_ONLY
             
-            # Получение портфеля
+            if learning_only:
+                logger.info("--- Sandbox цикл обучения (без торговли) ---")
+            else:
+                logger.info("--- Sandbox торговый цикл ---")
+            
+            # Получение портфеля (для информации, даже в режиме обучения)
             portfolio_info = self.get_portfolio_info(self.sandbox_client, "Sandbox")
             if portfolio_info:
                 self.sandbox_capital = portfolio_info['capital']
             
-            # TODO: Генерация сигналов и торговля для sandbox
-            # Здесь будет логика тестирования стратегий
+            # Сбор данных для обучения
+            if self.moex and self.db:
+                logger.info("Сбор данных для обучения...")
+                try:
+                    # Загрузка конфига тикеров
+                    import yaml
+                    with open('config/trading_config.yaml', 'r') as f:
+                        config = yaml.safe_load(f)
+                    tickers = config.get('tickers', {}).get('primary', ['SBER', 'GAZP', 'LKOH', 'GMKN'])
+                    
+                    # Сбор данных за последние 7 дней
+                    end_date = datetime.now()
+                    start_date = end_date - timedelta(days=7)
+                    
+                    for ticker in tickers:
+                        try:
+                            candles = self.moex.get_historical_candles(
+                                ticker=ticker,
+                                start_date=start_date,
+                                end_date=end_date,
+                                timeframe='1h'
+                            )
+                            
+                            if not candles.empty and self.db:
+                                # Сохранение в БД
+                                for _, row in candles.iterrows():
+                                    self.db.save_candle(
+                                        ticker=ticker,
+                                        time=row.get('time', row.get('begin', datetime.now())),
+                                        open=row.get('open', 0),
+                                        high=row.get('high', 0),
+                                        low=row.get('low', 0),
+                                        close=row.get('close', 0),
+                                        volume=row.get('volume', 0),
+                                        timeframe='1h'
+                                    )
+                                logger.info(f"✓ Собрано {len(candles)} свечей для {ticker}")
+                        except Exception as e:
+                            logger.warning(f"Ошибка сбора данных для {ticker}: {e}")
+                    
+                    logger.info("Данные собраны и сохранены в БД")
+                except Exception as e:
+                    logger.warning(f"Ошибка сбора данных: {e}")
             
-            logger.info("Sandbox цикл завершен")
+            # Генерация сигналов (для анализа, без размещения ордеров в режиме обучения)
+            logger.info("Генерация сигналов для анализа...")
+            # TODO: Здесь будет логика генерации сигналов на основе ML моделей
+            
+            if learning_only:
+                logger.info("✓ Sandbox цикл обучения завершен (торговля отключена)")
+            else:
+                # TODO: Размещение ордеров для sandbox (если режим обучения выключен)
+                logger.info("Sandbox цикл завершен")
             
         except Exception as e:
             logger.error(f"Ошибка в sandbox цикле: {e}", exc_info=True)
