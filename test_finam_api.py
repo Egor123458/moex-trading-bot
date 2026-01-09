@@ -24,13 +24,20 @@ if not token:
     exit(1)
 
 # Тест API
-url = "https://trade-api.finam.ru/api/v1/portfolio"
+url = "https://tradeapi.finam.ru/api/v1/portfolio"
 headers = {
     "X-Api-Key": token,
-    "Authorization": f"Bearer {token}",
+    "Accept": "application/json",
     "Content-Type": "application/json"
 }
-params = {"accountId": account_id} if account_id else {}
+# Finam REST API expects `clientId` and a set of Content.Include... flags
+params = {
+    'clientId': account_id,
+    'Content.IncludeCurrencies': True,
+    'Content.IncludeMoney': True,
+    'Content.IncludePositions': True,
+    'Content.IncludeMaxBuySell': True,
+} if account_id else {}
 
 print(f"\nURL: {url}")
 print(f"Headers: X-Api-Key={token[:20]}...")
@@ -43,37 +50,22 @@ try:
     print(f"\nСтатус ответа: {response.status_code}")
     print(f"Заголовки ответа: {dict(response.headers)}")
     
-            if response.status_code == 200:
-                content_type = response.headers.get('Content-Type', '')
-                
-                # Проверяем, что ответ JSON, а не HTML
-                if 'text/html' in content_type:
-                    print(f"\n⚠️  API вернул HTML вместо JSON!")
-                    print(f"Это означает, что URL неправильный или Finam использует другой формат API.")
-                    print(f"\nВозможные причины:")
-                    print(f"1. URL https://trade-api.finam.ru/api/v1/portfolio не существует")
-                    print(f"2. Finam использует другой формат API (возможно, нужна авторизация через торговый терминал)")
-                    print(f"3. Токен неверный или не имеет прав на доступ к API")
-                    print(f"\nРекомендация: Используйте INITIAL_CAPITAL из настроек для работы бота.")
-                    print(f"Бот будет работать, но баланс будет браться из .env файла (INITIAL_CAPITAL)")
-                    print(f"\nHTML ответ (первые 500 символов):")
-                    print(response.text[:500])
-                else:
-                    try:
-                        data = response.json()
-                        print(f"\n✅ Успешный ответ (JSON):")
-                        print(f"Данные: {data}")
-                        
-                        # Попытка извлечь баланс
-                        if 'totalValue' in data:
-                            print(f"\n💰 Общая стоимость портфеля: {data['totalValue']}")
-                        if 'cash' in data:
-                            print(f"💵 Денежные средства: {data['cash']}")
-                        if 'positions' in data:
-                            print(f"📊 Позиций: {len(data['positions'])}")
-                    except Exception as e:
-                        print(f"\n⚠️  Не удалось распарсить JSON: {e}")
-                        print(f"Текст ответа: {response.text[:500]}")
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            print(f"\n✅ Успешный ответ:")
+            print(f"Данные: {data}")
+            
+            # Попытка извлечь баланс
+            if 'totalValue' in data:
+                print(f"\n💰 Общая стоимость портфеля: {data['totalValue']}")
+            if 'cash' in data:
+                print(f"💵 Денежные средства: {data['cash']}")
+            if 'positions' in data:
+                print(f"📊 Позиций: {len(data['positions'])}")
+        except Exception as e:
+            print(f"\n⚠️  Не удалось распарсить JSON: {e}")
+            print(f"Текст ответа: {response.text[:500]}")
     else:
         print(f"\n❌ Ошибка API:")
         print(f"Текст ответа: {response.text[:500]}")
