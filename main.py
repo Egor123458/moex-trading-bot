@@ -179,7 +179,15 @@ class TradingBot:
             positions = portfolio.get('positions', [])
             positions_count = len(positions)
             
-            logger.info(f"{mode_name} портфель: {capital:,.2f} ₽ (позиций: {positions_count})")
+            # Если баланс 0, используем INITIAL_CAPITAL из настроек
+            if capital == 0.0:
+                if mode_name == "Sandbox":
+                    capital = self.sandbox_capital
+                elif mode_name == "Live":
+                    capital = self.live_capital
+                logger.info(f"{mode_name} портфель: баланс из API недоступен, используется INITIAL_CAPITAL: {capital:,.2f} ₽")
+            else:
+                logger.info(f"{mode_name} портфель: {capital:,.2f} ₽ (позиций: {positions_count})")
             
             # Обновление статуса
             if mode_name == "Sandbox":
@@ -197,6 +205,11 @@ class TradingBot:
             }
         except Exception as e:
             logger.warning(f"Ошибка получения {mode_name} портфеля: {e}")
+            # Возвращаем капитал из настроек при ошибке
+            if mode_name == "Sandbox":
+                return {'capital': self.sandbox_capital, 'cash': 0, 'positions_count': 0, 'positions': []}
+            elif mode_name == "Live":
+                return {'capital': self.live_capital, 'cash': 0, 'positions_count': 0, 'positions': []}
             return None
     
     def trading_cycle_sandbox(self):

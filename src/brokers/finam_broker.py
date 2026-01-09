@@ -36,83 +36,97 @@ class FinamBroker(BaseBroker):
             return {"positions": [], "total_value": 0.0, "cash": 0.0}
         
         try:
-            # Finam Trade API для получения портфеля
-            base_url = "https://trade-api.finam.ru"
+            # Finam Trade API - пробуем разные варианты URL
+            # Примечание: Finam может использовать другой формат API или требовать специальной авторизации
             
-            # Пробуем разные варианты URL и заголовков
+            # Вариант 1: Стандартный REST API
+            base_url = "https://trade-api.finam.ru"
             url = f"{base_url}/api/v1/portfolio"
+            
             headers = {
                 "X-Api-Key": self.token,
                 "Authorization": f"Bearer {self.token}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Accept": "application/json"
             }
             
-            # Если указан account_id, добавляем его в запрос
             params = {}
             if self.account_id:
                 params['accountId'] = self.account_id
             
             response = requests.get(url, headers=headers, params=params, timeout=10)
             
-            self.logger.debug(f"Finam API ответ: status={response.status_code}, url={url}")
+            self.logger.debug(f"Finam API запрос: url={url}, status={response.status_code}")
+            
+            # Проверяем, что ответ JSON, а не HTML
+            content_type = response.headers.get('Content-Type', '')
+            if 'text/html' in content_type:
+                self.logger.warning(f"Finam API вернул HTML вместо JSON. URL может быть неправильным.")
+                self.logger.warning(f"Попробуйте проверить документацию Finam API или использовать другой endpoint.")
+                # Возвращаем пустой портфель, но не падаем
+                return {"positions": [], "total_value": 0.0, "cash": 0.0}
             
             if response.status_code == 200:
-                data = response.json()
-                self.logger.debug(f"Finam API данные: {data}")
-                
-                positions = []
-                total_value = 0.0
-                cash = 0.0
-                
-                # Парсинг ответа Finam (разные возможные структуры)
-                # Вариант 1: positions в корне
-                if 'positions' in data:
-                    for pos in data['positions']:
-                        pos_value = pos.get('value', 0.0)
-                        if isinstance(pos_value, dict):
-                            pos_value = pos_value.get('value', 0.0) or pos_value.get('amount', 0.0)
-                        
-                        positions.append({
-                            "ticker": pos.get('ticker', pos.get('symbol', '')),
-                            "quantity": pos.get('quantity', pos.get('qty', 0)),
-                            "current_price": pos.get('price', pos.get('currentPrice', 0.0)),
-                            "average_buy_price": pos.get('average_price', pos.get('averagePrice', 0.0)),
-                        })
-                        total_value += float(pos_value) if pos_value else 0.0
-                
-                # Вариант 2: data.positions
-                elif 'data' in data and 'positions' in data['data']:
-                    for pos in data['data']['positions']:
-                        pos_value = pos.get('value', 0.0)
-                        if isinstance(pos_value, dict):
-                            pos_value = pos_value.get('value', 0.0) or pos_value.get('amount', 0.0)
-                        
-                        positions.append({
-                            "ticker": pos.get('ticker', pos.get('symbol', '')),
-                            "quantity": pos.get('quantity', pos.get('qty', 0)),
-                            "current_price": pos.get('price', pos.get('currentPrice', 0.0)),
-                            "average_buy_price": pos.get('average_price', pos.get('averagePrice', 0.0)),
-                        })
-                        total_value += float(pos_value) if pos_value else 0.0
-                
-                # Получение cash
-                cash = data.get('cash', data.get('availableCash', 0.0))
-                if isinstance(cash, dict):
-                    cash = cash.get('value', cash.get('amount', 0.0))
-                
-                # Если total_value не найден, пытаемся вычислить из позиций или взять из data
-                if total_value == 0.0:
-                    total_value = data.get('totalValue', data.get('totalAmount', 0.0))
-                    if isinstance(total_value, dict):
-                        total_value = total_value.get('value', total_value.get('amount', 0.0))
-                
-                self.logger.info(f"Портфель Finam: позиций={len(positions)}, total_value={total_value}, cash={cash}")
-                
-                return {
-                    "positions": positions,
-                    "total_value": float(total_value) if total_value else 0.0,
-                    "cash": float(cash) if cash else 0.0
-                }
+                try:
+                    data = response.json()
+                    self.logger.debug(f"Finam API данные: {data}")
+                    
+                    positions = []
+                    total_value = 0.0
+                    cash = 0.0
+                    
+                    # Парсинг ответа Finam (разные возможные структуры)
+                    # Вариант 1: positions в корне
+                    if 'positions' in data:
+                        for pos in data['positions']:
+                            pos_value = pos.get('value', 0.0)
+                            if isinstance(pos_value, dict):
+                                pos_value = pos_value.get('value', 0.0) or pos_value.get('amount', 0.0)
+                            
+                            positions.append({
+                                "ticker": pos.get('ticker', pos.get('symbol', '')),
+                                "quantity": pos.get('quantity', pos.get('qty', 0)),
+                                "current_price": pos.get('price', pos.get('currentPrice', 0.0)),
+                                "average_buy_price": pos.get('average_price', pos.get('averagePrice', 0.0)),
+                            })
+                            total_value += float(pos_value) if pos_value else 0.0
+                    
+                    # Вариант 2: data.positions
+                    elif 'data' in data and 'positions' in data['data']:
+                        for pos in data['data']['positions']:
+                            pos_value = pos.get('value', 0.0)
+                            if isinstance(pos_value, dict):
+                                pos_value = pos_value.get('value', 0.0) or pos_value.get('amount', 0.0)
+                            
+                            positions.append({
+                                "ticker": pos.get('ticker', pos.get('symbol', '')),
+                                "quantity": pos.get('quantity', pos.get('qty', 0)),
+                                "current_price": pos.get('price', pos.get('currentPrice', 0.0)),
+                                "average_buy_price": pos.get('average_price', pos.get('averagePrice', 0.0)),
+                            })
+                            total_value += float(pos_value) if pos_value else 0.0
+                    
+                    # Получение cash
+                    cash = data.get('cash', data.get('availableCash', 0.0))
+                    if isinstance(cash, dict):
+                        cash = cash.get('value', cash.get('amount', 0.0))
+                    
+                    # Если total_value не найден, пытаемся вычислить из позиций или взять из data
+                    if total_value == 0.0:
+                        total_value = data.get('totalValue', data.get('totalAmount', 0.0))
+                        if isinstance(total_value, dict):
+                            total_value = total_value.get('value', total_value.get('amount', 0.0))
+                    
+                    self.logger.info(f"Портфель Finam: позиций={len(positions)}, total_value={total_value}, cash={cash}")
+                    
+                    return {
+                        "positions": positions,
+                        "total_value": float(total_value) if total_value else 0.0,
+                        "cash": float(cash) if cash else 0.0
+                    }
+                except ValueError as e:
+                    self.logger.error(f"Ошибка парсинга JSON от Finam API: {e}")
+                    self.logger.debug(f"Ответ API: {response.text[:500]}")
             else:
                 self.logger.warning(f"Finam API вернул статус {response.status_code}: {response.text[:200]}")
                 
@@ -121,6 +135,9 @@ class FinamBroker(BaseBroker):
         except Exception as e:
             self.logger.error(f"Ошибка получения портфеля Finam: {e}", exc_info=True)
         
+        # Возвращаем пустой портфель, но бот продолжит работу
+        # Баланс будет использоваться из INITIAL_CAPITAL в настройках
+        self.logger.warning("Не удалось получить портфель из Finam API. Используется INITIAL_CAPITAL из настроек.")
         return {"positions": [], "total_value": 0.0, "cash": 0.0}
     
     def place_market_order(
